@@ -9,10 +9,13 @@ Records ~5 seconds at 16kHz, chunks audio in ~30ms blocks, and prints:
 from __future__ import annotations
 
 import sys
+import os
 import time
 from dataclasses import dataclass
 
 import numpy as np
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 try:
     import sounddevice as sd
@@ -22,10 +25,6 @@ except Exception as exc:
         f"Reason: {exc}. "
         "Fix: install it with `pip install sounddevice` and ensure PortAudio is available."
     ) from exc
-
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from modules.vad_module import VADModuleError, is_speech, set_threshold, threshold_tuning_guide
 

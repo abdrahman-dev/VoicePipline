@@ -7,15 +7,14 @@ or standalone:
     python tests/test_asr.py
 """
 
-import os
-import sys
+import sys, os
 import unittest
 import logging
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 import numpy as np
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from ..modules.asr_module import (
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from modules.asr_module import (
     record_audio,
     transcribe,
     ASRModuleError,
@@ -40,8 +39,8 @@ class TestRecordAudio(unittest.TestCase):
             record_audio(duration=0)
         self.assertIn("Invalid duration", str(ctx.exception))
 
-    @patch('sounddevice.rec')
-    @patch('sounddevice.wait')
+    @patch('modules.asr_module.sd.rec')
+    @patch('modules.asr_module.sd.wait')
     def test_record_audio_success(self, mock_wait, mock_rec):
         """Successful recording returns bytes."""
         # Mock sounddevice
@@ -59,7 +58,7 @@ class TestRecordAudio(unittest.TestCase):
         mock_rec.assert_called_once()
         mock_wait.assert_called_once()
 
-    @patch('sounddevice.rec')
+    @patch('modules.asr_module.sd.rec')
     def test_record_audio_microphone_error(self, mock_rec):
         """Handle microphone/device errors gracefully."""
         mock_rec.side_effect = RuntimeError("Microphone not found")
@@ -84,7 +83,7 @@ class TestTranscribe(unittest.TestCase):
             transcribe(None)
         self.assertIn("No audio data", str(ctx.exception))
 
-    @patch('speech_recognition.Recognizer.recognize_google')
+    @patch('modules.asr_module.sr.Recognizer.recognize_google')
     def test_transcribe_arabic_success(self, mock_recognize):
         """Successfully transcribe Arabic."""
         mock_recognize.return_value = "السلام عليكم"
@@ -95,7 +94,7 @@ class TestTranscribe(unittest.TestCase):
         self.assertEqual(text, "السلام عليكم")
         self.assertEqual(lang, "ar")
 
-    @patch('speech_recognition.Recognizer.recognize_google')
+    @patch('modules.asr_module.sr.Recognizer.recognize_google')
     def test_transcribe_english_success(self, mock_recognize):
         """Successfully transcribe English."""
         mock_recognize.return_value = "Hello world"
@@ -106,7 +105,7 @@ class TestTranscribe(unittest.TestCase):
         self.assertEqual(text, "Hello world")
         self.assertEqual(lang, "en")
 
-    @patch('speech_recognition.Recognizer.recognize_google')
+    @patch('modules.asr_module.sr.Recognizer.recognize_google')
     def test_transcribe_auto_detect_arabic_first(self, mock_recognize):
         """Auto-detect tries Arabic first, then English."""
         # First call (Arabic) succeeds
@@ -118,7 +117,7 @@ class TestTranscribe(unittest.TestCase):
         self.assertEqual(text, "مرحبا")
         self.assertEqual(lang, "ar")
 
-    @patch('speech_recognition.Recognizer.recognize_google')
+    @patch('modules.asr_module.sr.Recognizer.recognize_google')
     def test_transcribe_auto_detect_fallback_to_english(self, mock_recognize):
         """Auto-detect fallbacks to English if Arabic fails."""
         import speech_recognition as sr
@@ -135,7 +134,7 @@ class TestTranscribe(unittest.TestCase):
         self.assertEqual(text, "Hello")
         self.assertEqual(lang, "en")
 
-    @patch('speech_recognition.Recognizer.recognize_google')
+    @patch('modules.asr_module.sr.Recognizer.recognize_google')
     def test_transcribe_no_speech_detected(self, mock_recognize):
         """Handle case where no speech is detected in any language."""
         import speech_recognition as sr
@@ -148,7 +147,7 @@ class TestTranscribe(unittest.TestCase):
         self.assertIsNone(text)
         self.assertIsNone(lang)
 
-    @patch('speech_recognition.Recognizer.recognize_google')
+    @patch('modules.asr_module.sr.Recognizer.recognize_google')
     def test_transcribe_network_error(self, mock_recognize):
         """Handle network errors gracefully."""
         import speech_recognition as sr
@@ -173,9 +172,9 @@ class TestTranscribe(unittest.TestCase):
 class TestIntegration(unittest.TestCase):
     """Integration tests (requires actual hardware/network)."""
 
-    @patch('sounddevice.rec')
-    @patch('sounddevice.wait')
-    @patch('speech_recognition.Recognizer.recognize_google')
+    @patch('modules.asr_module.sd.rec')
+    @patch('modules.asr_module.sd.wait')
+    @patch('modules.asr_module.sr.Recognizer.recognize_google')
     def test_full_pipeline(self, mock_recognize, mock_wait, mock_rec):
         """Full pipeline: record → transcribe."""
         # Setup mocks
@@ -215,8 +214,6 @@ def manual_test():
 
 
 if __name__ == "__main__":
-    import sys
-    
     if len(sys.argv) > 1 and sys.argv[1] == "--manual":
         # python test_asr.py --manual
         manual_test()
