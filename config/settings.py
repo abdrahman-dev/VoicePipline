@@ -38,18 +38,38 @@ class VADSettings:
     model_trust_repo: bool = os.getenv("ROBOT_VAD_TRUST_REPO", "true").lower() in ("1", "true", "yes")
 
 
+"""Updated LLMSettings dataclass for openrouter API"""
+
+from dataclasses import dataclass
+import os
+
+
 @dataclass(frozen=True)
 class LLMSettings:
-    provider: str = os.getenv("ROBOT_LLM_PROVIDER", "ollama")
-    ollama_host: str = os.getenv("ROBOT_OLLAMA_HOST", "http://localhost:11434")
-    ollama_model: str = os.getenv("ROBOT_OLLAMA_MODEL", "glm-4.6:cloud")
-    ollama_availability_timeout_seconds: int = int(os.getenv("ROBOT_OLLAMA_AVAIL_TIMEOUT_SEC", "5"))
-    request_timeout_seconds: int = int(os.getenv("ROBOT_LLM_REQUEST_TIMEOUT_SEC", "90"))
-    summarization_timeout_seconds: int = int(os.getenv("ROBOT_LLM_SUMMARIZE_TIMEOUT_SEC", "15"))
+    """LLM configuration for openrouter API integration."""
+    
+    provider: str = os.getenv("ROBOT_LLM_PROVIDER", "openrouter")
+    
+    # OpenRouter API credentials
+    openrouter_api_key: str = os.getenv("ROBOT_OPENROUTER_API_KEY", "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")
+    openrouter_model: str = os.getenv("ROBOT_OPENROUTER_MODEL", "qwen/qwen3.6-plus-preview:free")
+    
+    # Timeouts
+    openrouter_availability_timeout_seconds: int = int(
+        os.getenv("ROBOT_OPENROUTER_AVAILABILITY_TIMEOUT_SEC", "5")
+    )
+    request_timeout_seconds: int = int(
+        os.getenv("ROBOT_LLM_REQUEST_TIMEOUT_SEC", "90")
+    )
+    summarization_timeout_seconds: int = int(
+        os.getenv("ROBOT_LLM_SUMMARIZE_TIMEOUT_SEC", "60")
+    )
+    
+    # Database & Memory
     db_path: str = os.getenv("ROBOT_LLM_DB_PATH", "robot_sessions.db")
     sliding_window_size: int = int(os.getenv("ROBOT_LLM_WINDOW_SIZE", "10"))
-
-    # System prompts are config so the LLM can be swapped later without editing code.
+    
+    # System Prompts
     system_prompt_arabic: str = (
         "أنت روبوت تعليمي ذكي مساعد للطلاب في رحلتهم التعليمية.\n\n"
         "**أهدافك الرئيسية:**\n"
@@ -68,6 +88,7 @@ class LLMSettings:
         "- الإجابات الطويلة جداً\n"
         "- استخدام مصطلحات معقدة بدون شرح"
     )
+    
     system_prompt_english: str = (
         "You are an intelligent educational robot assistant helping students in their learning journey.\n\n"
         "**Your main goals:**\n"
