@@ -51,7 +51,7 @@ class LLMSettings:
     provider: str = os.getenv("ROBOT_LLM_PROVIDER", "openrouter")
     
     # OpenRouter API credentials
-    openrouter_api_key: str = field(default=os.getenv("ROBOT_OPENROUTER_API_KEY", "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"))
+    openrouter_api_key: str = field(default=os.getenv("ROBOT_OPENROUTER_API_KEY", ""))
     openrouter_model: str = os.getenv("ROBOT_OPENROUTER_MODEL", "openrouter/free")
     
     # Timeouts
