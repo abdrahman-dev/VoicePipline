@@ -9,6 +9,7 @@ Handles:
 
 import logging
 import sqlite3
+import threading
 from typing import Optional, List
 from datetime import datetime
 import requests
@@ -19,6 +20,14 @@ logger = logging.getLogger(__name__)
 
 _SETTINGS = get_settings()
 _LLM = _SETTINGS.llm
+
+_thread_local = threading.local()
+
+
+def _get_db_connection():
+    if not hasattr(_thread_local, 'conn') or _thread_local.conn is None:
+        _thread_local.conn = sqlite3.connect(_LLM.db_path, check_same_thread=False)
+    return _thread_local.conn
 
 
 class LLMModuleError(RuntimeError):
@@ -96,6 +105,12 @@ class openrouterConnection:
                 )
             
             result = response.json()
+            
+            if "error" in result:
+                raise LLMModuleError(
+                    f"[llm_module.chat] openrouter API error: {result['error']}"
+                )
+            
             content = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
             
             if not content:
@@ -131,44 +146,43 @@ class SessionManager:
     def _init_database(self):
         """Initialize SQLite database schema."""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sessions (
-                    session_id TEXT PRIMARY KEY,
-                    student_name TEXT NOT NULL,
-                    language TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_interaction TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS messages (
-                    message_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (session_id) REFERENCES sessions(session_id)
-                )
-            """)
-            
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS summaries (
-                    summary_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    summary_text TEXT NOT NULL,
-                    message_count INTEGER NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (session_id) REFERENCES sessions(session_id)
-                )
-            """)
-            
-            conn.commit()
-            conn.close()
-            logger.info("[LLM] Database initialized")
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        session_id TEXT PRIMARY KEY,
+                        student_name TEXT NOT NULL,
+                        language TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_interaction TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS messages (
+                        message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (session_id) REFERENCES sessions(session_id)
+                    )
+                """)
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS summaries (
+                        summary_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id TEXT NOT NULL,
+                        summary_text TEXT NOT NULL,
+                        message_count INTEGER NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (session_id) REFERENCES sessions(session_id)
+                    )
+                """)
+                
+                conn.commit()
+                logger.info("[LLM] Database initialized")
         
         except Exception as e:
             raise LLMModuleError(
@@ -205,14 +219,13 @@ class SessionManager:
         session_id = f"{student_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO sessions (session_id, student_name, language)
-                VALUES (?, ?, ?)
-            """, (session_id, student_name, language))
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO sessions (session_id, student_name, language)
+                    VALUES (?, ?, ?)
+                """, (session_id, student_name, language))
+                conn.commit()
             
             logger.info(f"[LLM] Session created: {session_id}")
             return session_id
@@ -244,15 +257,14 @@ class SessionManager:
             )
         
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO messages (session_id, role, content)
-                VALUES (?, ?, ?)
-            """, (session_id, role, content))
-            conn.commit()
-            message_id = cursor.lastrowid
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO messages (session_id, role, content)
+                    VALUES (?, ?, ?)
+                """, (session_id, role, content))
+                conn.commit()
+                message_id = cursor.lastrowid
             
             logger.debug(f"[LLM] Message saved: {message_id} ({role})")
             return message_id
@@ -273,19 +285,18 @@ class SessionManager:
             List of message dicts with 'role' and 'content'
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT role, content FROM messages
-                WHERE session_id = ?
-                ORDER BY timestamp DESC
-                LIMIT ?
-            """, (session_id, window_size))
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT role, content FROM messages
+                    WHERE session_id = ?
+                    ORDER BY timestamp ASC
+                    LIMIT ?
+                """, (session_id, window_size))
+                
+                rows = cursor.fetchall()
             
-            rows = cursor.fetchall()
-            conn.close()
-            
-            messages = [{"role": row[0], "content": row[1]} for row in reversed(rows)]
+            messages = [{"role": row[0], "content": row[1]} for row in rows]
             logger.debug(f"[LLM] Retrieved {len(messages)} messages (window)")
             return messages
         
@@ -304,16 +315,15 @@ class SessionManager:
             List of all message dicts
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT role, content FROM messages
-                WHERE session_id = ?
-                ORDER BY timestamp ASC
-            """, (session_id,))
-            
-            rows = cursor.fetchall()
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT role, content FROM messages
+                    WHERE session_id = ?
+                    ORDER BY timestamp ASC
+                """, (session_id,))
+                
+                rows = cursor.fetchall()
             
             messages = [{"role": row[0], "content": row[1]} for row in rows]
             return messages
@@ -324,16 +334,31 @@ class SessionManager:
             ) from e
     
     def get_message_count(self, session_id: str) -> int:
-        """Get total message count in session."""
+        """Get total message count in session (user messages only)."""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) FROM messages WHERE session_id = ?",
-                (session_id,)
-            )
-            count = cursor.fetchone()[0]
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT COUNT(*) FROM messages WHERE session_id = ? AND role = 'user'",
+                    (session_id,)
+                )
+                count = cursor.fetchone()[0]
+            return count
+        except Exception as e:
+            raise LLMModuleError(
+                f"[llm_module.get_message_count] Failed to count messages: {e}"
+            ) from e
+    
+    def get_total_message_count(self, session_id: str) -> int:
+        """Get total message count in session (user + assistant)."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+                    (session_id,)
+                )
+                count = cursor.fetchone()[0]
             return count
         except Exception as e:
             raise LLMModuleError(
@@ -349,14 +374,13 @@ class SessionManager:
             message_count: Number of messages summarized
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO summaries (session_id, summary_text, message_count)
-                VALUES (?, ?, ?)
-            """, (session_id, summary_text, message_count))
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO summaries (session_id, summary_text, message_count)
+                    VALUES (?, ?, ?)
+                """, (session_id, summary_text, message_count))
+                conn.commit()
             logger.info(f"[LLM] Summary saved ({message_count} messages)")
         
         except Exception as e:
@@ -367,11 +391,10 @@ class SessionManager:
     def get_session_language(self, session_id: str) -> str:
         """Get session language."""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT language FROM sessions WHERE session_id = ?", (session_id,))
-            result = cursor.fetchone()
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT language FROM sessions WHERE session_id = ?", (session_id,))
+                result = cursor.fetchone()
             return result[0] if result else _SETTINGS.general.default_session_language
         except Exception:
             return _SETTINGS.general.default_session_language

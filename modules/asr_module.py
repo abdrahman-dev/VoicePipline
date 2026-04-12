@@ -38,7 +38,7 @@ def record_audio(duration: float = _ASR.default_record_duration_seconds, sampler
     Raises:
         ASRModuleError: If duration/samplerate invalid or recording fails.
     """
-    if duration <= 0:
+    if duration is None or duration <= 0:
         raise ASRModuleError(
             "[asr_module.record_audio] Invalid duration. "
             f"Expected positive number, got {duration}. "
@@ -59,6 +59,12 @@ def record_audio(duration: float = _ASR.default_record_duration_seconds, sampler
         logger.debug(f"[ASR] Recorded {len(audio_bytes)} bytes")
         return audio_bytes
     
+    except sd.PortAudioError as e:
+        raise ASRModuleError(
+            "[asr_module.record_audio] Microphone unavailable. "
+            f"Reason: {e}. "
+            "Fix: check microphone connection and sounddevice installation."
+        ) from e
     except Exception as e:
         raise ASRModuleError(
             "[asr_module.record_audio] Recording failed. "

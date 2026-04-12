@@ -29,6 +29,7 @@ torch.set_num_threads(_VAD.torch_threads)
 
 _MODEL = None
 _MODEL_LOCK = threading.Lock()
+_UTILS = None
 _THRESHOLD = _VAD.initial_threshold
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict
 
 
@@ -19,7 +19,7 @@ class ASRSettings:
     sample_rate: int = int(os.getenv("ROBOT_ASR_SAMPLE_RATE", "16000"))
     language_mode: str = os.getenv("ROBOT_ASR_LANGUAGE_MODE", "auto")  # "auto", "en", "ar"
     default_record_duration_seconds: float = float(os.getenv("ROBOT_ASR_DEFAULT_DURATION_SEC", "5.0"))
-    supported_languages: Dict[str, str] = None  # populated in get_settings()
+    supported_languages: Dict[str, str] = field(default_factory=dict)  # populated in get_settings()
 
 
 @dataclass(frozen=True)
@@ -51,8 +51,8 @@ class LLMSettings:
     provider: str = os.getenv("ROBOT_LLM_PROVIDER", "openrouter")
     
     # OpenRouter API credentials
-    openrouter_api_key: str = os.getenv("ROBOT_OPENROUTER_API_KEY", "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")
-    openrouter_model: str = os.getenv("ROBOT_OPENROUTER_MODEL", "qwen/qwen3.6-plus-preview:free")
+    openrouter_api_key: str = field(default=os.getenv("ROBOT_OPENROUTER_API_KEY", "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"))
+    openrouter_model: str = os.getenv("ROBOT_OPENROUTER_MODEL", "openrouter/free")
     
     # Timeouts
     openrouter_availability_timeout_seconds: int = int(
@@ -114,7 +114,7 @@ class TTSSettings:
     engine: str = os.getenv("ROBOT_TTS_ENGINE", "edge_tts")  # future: "coqui", "piper", etc
     audio_temp_dir: str = os.getenv("ROBOT_TTS_TEMP_DIR", tempfile.gettempdir())
     audio_filename_template: str = os.getenv("ROBOT_TTS_AUDIO_TEMPLATE", "tts_{turn_id}.mp3")
-    voice_map: Dict[str, str] = None  # populated in get_settings()
+    voice_map: Dict[str, str] = field(default_factory=dict)  # populated in get_settings()
     pygame_poll_interval_seconds: float = float(os.getenv("ROBOT_TTS_POLL_SEC", "0.05"))
 
 
@@ -130,7 +130,7 @@ class Settings:
 def get_settings() -> Settings:
     # These are defined in settings (not modules) so providers are swappable/configurable.
     asr_supported = {"en": "en-US", "ar": "ar-EG"}
-    voice_map = {"en": "en-US-GuyNeural", "ar": "ar-EG-SalmaNeural"}
+    voice_map = {"en": "en-US-GuyNeural", "ar": "ar-SA-HamedNeural"}
 
     general = GeneralSettings()
     asr = ASRSettings(supported_languages=asr_supported)

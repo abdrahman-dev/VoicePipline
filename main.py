@@ -75,10 +75,14 @@ class VoicePipeline:
         self._llm = llm_module.LLMModule(_SETTINGS.llm)
 
         # Create a conversation session once.
-        self._session_id = self._llm.session_manager.create_session(
-            student_name=_SETTINGS.general.student_name,
-            language=_SETTINGS.general.default_session_language,
-        )
+        try:
+            self._session_id = self._llm.session_manager.create_session(
+                student_name=_SETTINGS.general.student_name,
+                language=_SETTINGS.general.default_session_language,
+            )
+        except Exception as e:
+            self._logger.error(f"Failed to create session: {e}")
+            raise
 
         self._latest_turn_id = 0
         self._turn_lock = threading.Lock()
@@ -130,8 +134,11 @@ class VoicePipeline:
                 return
 
             # Start TTS playback (interruptible).
-            self._logger.info("[TTS] Playback start (lang=%s)", detected_lang)
-            self._tts.speak(response, language=detected_lang)
+            if detected_lang:
+                self._logger.info("[TTS] Playback start (lang=%s)", detected_lang)
+                self._tts.speak(response, language=detected_lang)
+            else:
+                self._logger.warning("[TTS] No detected language, skipping playback")
         except (asr_module.ASRModuleError, llm_module.LLMModuleError, tts_module.TTSModuleError) as exc:
             self._logger.error("Segment processing failed: %s", exc, exc_info=True)
         except Exception as exc:
